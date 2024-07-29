@@ -3,6 +3,7 @@
     "definition_field": "Meaning",
     "kanji_field": "Front",
     "kana_field": "Reading",
+    "romaji_field": "Romaji",
     "type_field": "WordType",
-    "number_of_defs": 3
+    "number_of_defs": 5
 }
