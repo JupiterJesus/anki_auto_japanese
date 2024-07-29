@@ -10,9 +10,12 @@ from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QLineEdit, QDialogButt
 from anki.notes import Note
 from aqt import gui_hooks, qconnect, mw
 
+from . import wanakana
+
 SETTING_SRC_FIELD = "kanji_field"
 SETTING_FURI_DEST_FIELD = "furigana_field"
 SETTING_KANA_DEST_FIELD = "kana_field"
+SETTING_ROMAJI_DEST_FIELD = "romaji_field"
 SETTING_TYPE_DEST_FIELD = "type_field"
 SETTING_MEANING_FIELD = "definition_field"
 SETTING_NUM_DEFS = "number_of_defs"
@@ -137,25 +140,32 @@ def search_furigana(data, target_text):
     return ""
 
 
-def parts_of_speech_conversion(input_str: str) -> str:
+def get_romaji(src_txt: str) -> str:
+    romaji_result = wanakana.to_romaji(src_txt)
+    return romaji_result
+
+def parts_of_speech_conversion(src_txt: str, input_str: str) -> str:
     output_str = ""
     if "noun" in input_str.lower():
-        output_str += "名詞、"
-    if "godan" in input_str.lower():
-        output_str += "五段、"
-    if "ichidan" in input_str.lower():
-        output_str += "一段、"
-    if "suru" in input_str.lower():
-        output_str += "する、"
-    if input_str.startswith("transitive verb") or " transitive verb" in input_str.lower():
-        output_str += "他動詞、"
-    if "intransitive verb" in input_str.lower():
-        output_str += "自動詞、"
-    if "adjective (keiyoushi)" in input_str.lower():
-        output_str += "いー形容詞、"
+        output_str += "Noun<br>"
     if "adjectival nouns" in input_str.lower():
-        output_str += "なー形容詞、"
-    return output_str.strip("、")
+        output_str += "な-adjective<br>"
+    if "adjective (keiyoushi)" in input_str.lower():
+        output_str += "い-adjective<br>"
+    if input_str.startswith("transitive verb") or " transitive verb" in input_str.lower():
+        output_str += "Transitive "
+        if "intransitive verb" in input_str.lower():
+            output_str += "and intransitive "
+    if not(input_str.startswith("transitive verb") or " transitive verb" in input_str.lower()) and "intransitive verb" in input_str.lower():
+        output_str += "Intransitive "
+    if "ichidan" in input_str.lower():
+        output_str += "ichidan verb<br>"
+    if "godan" in input_str.lower():
+        last_char = src_txt[-1:]
+        output_str += "godan verb with '" + last_char + "' ending<br>"
+    if "suru" in input_str.lower():
+        output_str += "suru verb " + src_txt + "する<br>"
+    return output_str.strip().removesuffix("<br>") # remove any superfluous breaks
 
 
 def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
@@ -168,10 +178,12 @@ def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
         # Strip for good measure
         src_txt = mw.col.media.strip(note[modified_field])
         if src_txt != "" and (previous_srcTxt is None or src_txt != previous_srcTxt):
+            
             # Added the field checks for people who don't have all fields for whatever reason
             if config.get(SETTING_FURI_DEST_FIELD) in fields:
                 if insert_if_empty(fields, note, SETTING_FURI_DEST_FIELD, search_furigana(jmdict_furi_data, src_txt)):
                     changed = True
+            
             jmdict_info = dict_data.get(src_txt, None)
             if jmdict_info is not None:
                 if config.get(SETTING_MEANING_FIELD) in fields:
@@ -184,8 +196,13 @@ def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
                         changed = True
                 if config.get(SETTING_TYPE_DEST_FIELD) in fields:
                     if insert_if_empty(fields, note, SETTING_TYPE_DEST_FIELD,
-                                       parts_of_speech_conversion(jmdict_info.get("parts_of_speech_values", ""))):
+                                       parts_of_speech_conversion(src_txt, jmdict_info.get("parts_of_speech_values", ""))):
                         changed = True
+                        
+            if config.get(SETTING_ROMAJI_DEST_FIELD) in fields:
+                kana_txt = get_field(fields, note, SETTING_KANA_DEST_FIELD)
+                if insert_if_empty(fields, note, SETTING_ROMAJI_DEST_FIELD, get_romaji(kana_txt)):
+                    changed = True
     return changed
 
 
@@ -197,6 +214,13 @@ def insert_if_empty(fields: list, note: Note, dest_config: str, new_text: str):
         if note[dest_field] == "":
             note[dest_field] = new_text
         return True
+
+
+def get_field(fields: list, note: Note, dest_config: str):
+    dest_field = config[dest_config]
+    if dest_field in fields:
+        return note[dest_field]
+    return ""
 
 
 def settings_dialog():
@@ -233,6 +257,13 @@ def settings_dialog():
     box_kana.addWidget(label_kana)
     box_kana.addWidget(text_kana)
 
+    box_romaji = QHBoxLayout()
+    label_romaji = QLabel("Romaji field:")
+    text_romaji = QLineEdit("")
+    text_romaji.setMinimumWidth(200)
+    box_romaji.addWidget(label_romaji)
+    box_romaji.addWidget(text_romaji)
+
     box_type = QHBoxLayout()
     label_type = QLabel("Type field:")
     text_type = QLineEdit("")
@@ -255,6 +286,7 @@ def settings_dialog():
         text_furigana.setText(config.get(SETTING_FURI_DEST_FIELD, "not_set"))
         text_def.setText(config.get(SETTING_MEANING_FIELD, "not_set"))
         text_kana.setText(config.get(SETTING_KANA_DEST_FIELD, "not_set"))
+        text_romaji.setText(config.get(SETTING_ROMAJI_DEST_FIELD, "not_set"))
         text_type.setText(config.get(SETTING_TYPE_DEST_FIELD, "WordType"))
         text_def_nums.setValue(config.get(SETTING_NUM_DEFS, 5))
 
@@ -263,6 +295,7 @@ def settings_dialog():
         config[SETTING_FURI_DEST_FIELD] = text_furigana.text()
         config[SETTING_MEANING_FIELD] = text_def.text()
         config[SETTING_KANA_DEST_FIELD] = text_kana.text()
+        config[SETTING_ROMAJI_DEST_FIELD] = text_romaji.text()
         config[SETTING_TYPE_DEST_FIELD] = text_type.text()
         config[SETTING_NUM_DEFS] = text_def_nums.value()
         mw.addonManager.writeConfig(__name__, config)
@@ -275,6 +308,7 @@ def settings_dialog():
         layout.addLayout(box_query)
         layout.addLayout(box_furigana)
         layout.addLayout(box_kana)
+        layout.addLayout(box_romaji)
         layout.addLayout(box_def)
         layout.addLayout(box_type)
         layout.addLayout(box_def_nums)
@@ -298,8 +332,8 @@ def init_menu():
 
 
 def get_field_names_array():
-    array = [config.get(SETTING_SRC_FIELD), config.get(SETTING_FURI_DEST_FIELD), config.get(SETTING_KANA_DEST_FIELD),
-             config.get(SETTING_TYPE_DEST_FIELD), config.get(SETTING_MEANING_FIELD)]
+    array = [config.get(SETTING_SRC_FIELD), config.get(SETTING_FURI_DEST_FIELD), config.get(SETTING_KANA_DEST_FIELD), 
+             config.get(SETTING_ROMAJI_DEST_FIELD), config.get(SETTING_TYPE_DEST_FIELD), config.get(SETTING_MEANING_FIELD)]
     return array
 
 
