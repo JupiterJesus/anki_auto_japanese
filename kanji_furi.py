@@ -20,6 +20,7 @@ SETTING_TYPE_DEST_FIELD = "type_field"
 SETTING_MASU_DEST_FIELD = "masu_field"
 SETTING_TE_DEST_FIELD = "te_field"
 SETTING_MEANING_FIELD = "definition_field"
+SETTING_ALTERNATES_FIELD = "alternates_field"
 SETTING_NUM_DEFS = "number_of_defs"
 
 # This is used to prevent excessive lookups
@@ -71,13 +72,17 @@ def build_dict_from_xml(root):
                               "senses": senses, "reb": reb}
     return output
 
+# Takes a dictionary entry and a limit
+# Returns an array of english definitions of length no more than limit
 def get_senses(dict_item, limit=5):
-    numbers = list(range(1, limit+1))
     arry = []
-    for number in numbers:
+    for number in range(1, limit+1):
         if number in dict_item["senses"]:
-            arry.append(dict_item["senses"][number])
-    return "<br>".join(arry)
+            sense = dict_item["senses"][number]
+            if (sense):
+                sense = sense.replace(";", ",")
+            arry.append(sense)
+    return arry
 
 def search_def(root, keb_text, def_limit=0):
     return_val = ""
@@ -232,7 +237,33 @@ def do_conjugation(src_txt: str, fields: list, note: Note, type_str: str) -> str
     if masu_form and insert_if_empty(fields, note, SETTING_MASU_DEST_FIELD, masu_form):
         changed = True
     return changed
+  
+def do_meanings(src_txt: str, fields: list, note: Note, def_num: int, jmdict_info) -> str:
+    changed = False;
+    senses = get_senses(jmdict_info, def_num)
     
+    # Grab the meanings, then put them all in the meaning field or 
+    # split between meaning and alternates fields, if defined
+    if config.get(SETTING_MEANING_FIELD) in fields:
+        if config.get(SETTING_ALTERNATES_FIELD) in fields:
+            # If we're doing separate meaning and alternates fields,
+            # Put the first definition into the meaning field by itself, with the 1: stripped
+            if (senses):
+                primary = senses.pop(0).removeprefix("1: ")
+                if insert_if_empty(fields, note, SETTING_MEANING_FIELD, primary):
+                    changed = True;
+                if senses:
+                    alternates = "<br>".join(senses)
+                    if insert_if_empty(fields, note, SETTING_ALTERNATES_FIELD, alternates):
+                        changed = True;
+        else: # otherwise, we just put all meanings into a list in the meaning field
+            if senses:
+                defs = "<br>".join(senses)
+                if insert_if_empty(fields, note, SETTING_MEANING_FIELD, defs):
+                    changed = True;
+            
+    return changed
+                           
 def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
     # Get the field names
     fields = mw.col.models.field_names(note.note_type())
@@ -251,18 +282,18 @@ def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
             
             jmdict_info = dict_data.get(src_txt, None)
             if jmdict_info is not None:
-                if config.get(SETTING_MEANING_FIELD) in fields:
-                    def_num = config[SETTING_NUM_DEFS]
-                    if insert_if_empty(fields, note, SETTING_MEANING_FIELD,
-                                       get_senses(jmdict_info, def_num)):
-                        changed = True
+                def_num = config[SETTING_NUM_DEFS]
+                if do_meanings(src_txt, fields, note, def_num, jmdict_info):
+                    changed = True
+                    
                 if config.get(SETTING_KANA_DEST_FIELD) in fields:
                     if insert_if_empty(fields, note, SETTING_KANA_DEST_FIELD, jmdict_info.get("reb", "")):
                         changed = True
+                        
                 if config.get(SETTING_TYPE_DEST_FIELD) in fields:
-                    if insert_if_empty(fields, note, SETTING_TYPE_DEST_FIELD,
-                                       parts_of_speech_conversion(src_txt, jmdict_info.get("parts_of_speech_values", ""))):
+                    if insert_if_empty(fields, note, SETTING_TYPE_DEST_FIELD, parts_of_speech_conversion(src_txt, jmdict_info.get("parts_of_speech_values", ""))):
                         changed = True
+                        
                 if do_conjugation(src_txt, fields, note, jmdict_info.get("parts_of_speech_values", "")):
                     changed = True
                 
@@ -317,6 +348,13 @@ def settings_dialog():
     box_def.addWidget(label_def)
     box_def.addWidget(text_def)
 
+    box_alt = QHBoxLayout()
+    label_alt = QLabel("Alternate/additional definitions field:")
+    text_alt = QLineEdit("")
+    text_alt.setMinimumWidth(200)
+    box_alt.addWidget(label_def)
+    box_alt.addWidget(text_def)
+
     box_kana = QHBoxLayout()
     label_kana = QLabel("Kana field:")
     text_kana = QLineEdit("")
@@ -366,6 +404,7 @@ def settings_dialog():
         text_query.setText(config.get(SETTING_SRC_FIELD, "not_set"))
         text_furigana.setText(config.get(SETTING_FURI_DEST_FIELD, "not_set"))
         text_def.setText(config.get(SETTING_MEANING_FIELD, "not_set"))
+        text_def.setText(config.get(SETTING_ALTERNATES_FIELD, "not_set"))
         text_kana.setText(config.get(SETTING_KANA_DEST_FIELD, "not_set"))
         text_romaji.setText(config.get(SETTING_ROMAJI_DEST_FIELD, "not_set"))
         text_type.setText(config.get(SETTING_TYPE_DEST_FIELD, "WordType"))
@@ -377,6 +416,7 @@ def settings_dialog():
         config[SETTING_SRC_FIELD] = text_query.text()
         config[SETTING_FURI_DEST_FIELD] = text_furigana.text()
         config[SETTING_MEANING_FIELD] = text_def.text()
+        config[SETTING_ALTERNATES_FIELD] = text_alt.text()
         config[SETTING_KANA_DEST_FIELD] = text_kana.text()
         config[SETTING_ROMAJI_DEST_FIELD] = text_romaji.text()
         config[SETTING_TYPE_DEST_FIELD] = text_type.text()
@@ -395,6 +435,7 @@ def settings_dialog():
         layout.addLayout(box_kana)
         layout.addLayout(box_romaji)
         layout.addLayout(box_def)
+        layout.addLayout(box_alt)
         layout.addLayout(box_type)
         layout.addLayout(box_te)
         layout.addLayout(box_masu)
@@ -421,7 +462,7 @@ def init_menu():
 def get_field_names_array():
     array = [config.get(SETTING_SRC_FIELD), config.get(SETTING_FURI_DEST_FIELD), config.get(SETTING_KANA_DEST_FIELD), 
              config.get(SETTING_ROMAJI_DEST_FIELD), config.get(SETTING_TYPE_DEST_FIELD), config.get(SETTING_MEANING_FIELD),
-             config.get(SETTING_TE_DEST_FIELD), config.get(SETTING_MASU_DEST_FIELD)]
+             config.get(SETTING_TE_DEST_FIELD), config.get(SETTING_MASU_DEST_FIELD), config.get(SETTING_ALTERNATES_FIELD)]
     return array
 
 
