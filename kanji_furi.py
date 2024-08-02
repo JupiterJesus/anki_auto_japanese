@@ -17,6 +17,8 @@ SETTING_FURI_DEST_FIELD = "furigana_field"
 SETTING_KANA_DEST_FIELD = "kana_field"
 SETTING_ROMAJI_DEST_FIELD = "romaji_field"
 SETTING_TYPE_DEST_FIELD = "type_field"
+SETTING_MASU_DEST_FIELD = "masu_field"
+SETTING_TE_DEST_FIELD = "te_field"
 SETTING_MEANING_FIELD = "definition_field"
 SETTING_NUM_DEFS = "number_of_defs"
 
@@ -144,30 +146,93 @@ def get_romaji(src_txt: str) -> str:
     romaji_result = wanakana.to_romaji(src_txt)
     return romaji_result
 
-def parts_of_speech_conversion(src_txt: str, input_str: str) -> str:
+def parts_of_speech_conversion(src_txt: str, type_str: str) -> str:
     output_str = ""
-    if "noun" in input_str.lower():
+    if "noun" in type_str.lower():
         output_str += "Noun<br>"
-    if "adjectival nouns" in input_str.lower():
+    if "adjectival nouns" in type_str.lower():
         output_str += "な-adjective<br>"
-    if "adjective (keiyoushi)" in input_str.lower():
+    if "adjective (keiyoushi)" in type_str.lower():
         output_str += "い-adjective<br>"
-    if input_str.startswith("transitive verb") or " transitive verb" in input_str.lower():
+    if type_str.startswith("transitive verb") or " transitive verb" in type_str.lower():
         output_str += "Transitive "
-        if "intransitive verb" in input_str.lower():
+        if "intransitive verb" in type_str.lower():
             output_str += "and intransitive "
-    if not(input_str.startswith("transitive verb") or " transitive verb" in input_str.lower()) and "intransitive verb" in input_str.lower():
+    if not(type_str.startswith("transitive verb") or " transitive verb" in type_str.lower()) and "intransitive verb" in type_str.lower():
         output_str += "Intransitive "
-    if "ichidan" in input_str.lower():
+    if "ichidan" in type_str.lower():
         output_str += "ichidan verb<br>"
-    if "godan" in input_str.lower():
+    if "godan" in type_str.lower():
         last_char = src_txt[-1:]
         output_str += "godan verb with '" + last_char + "' ending<br>"
-    if "suru" in input_str.lower():
+    if "suru" in type_str.lower():
         output_str += "suru verb " + src_txt + "する<br>"
     return output_str.strip().removesuffix("<br>") # remove any superfluous breaks
 
 
+def do_conjugation(src_txt: str, fields: list, note: Note, type_str: str) -> str:
+    changed = False
+    masu_form = ""
+    te_form = ""
+    ending = src_txt[-1:]
+    stem = src_txt[:-1]
+    
+    if "verb" in type_str.lower():
+        if "来る" == src_txt:
+            masu_form = stem + "きます"
+            te_form = stem + "来て"
+        elif "する" == src_txt:
+            masu_form = stem + "します"
+            te_form = stem + "して"
+        elif "ichidan" in type_str.lower():
+            masu_form = stem + "ます"
+            te_form = stem + "て"
+        elif "godan" in type_str.lower():
+            if "す" == ending:
+                masu_form = stem + "します"
+                te_form = stem + "して"
+            elif "る" == ending:
+                masu_form = stem + "ります"
+                te_form = stem + "って"
+            elif "む" == ending:
+                masu_form = stem + "みます"
+                te_form = stem + "んで"
+            elif "ぶ" == ending:
+                masu_form = stem + "びます"
+                te_form = stem + "んで"
+            elif "ぬ" == ending:
+                masu_form = stem + "にます"
+                te_form = stem + "んで"
+            elif "つ" == ending:
+                masu_form = stem + "ちます"
+                te_form = stem + "って"
+            elif "く" == ending:
+                masu_form = stem + "きます"
+                if stem == "行":
+                    te_form = stem + "って"
+                else:
+                    te_form = stem + "いて"
+            elif "ぐ" == ending:
+                masu_form = stem + "ぎます"
+                te_form = stem + "いで"
+            elif "う" == ending:
+                masu_form = stem + "います"
+                te_form = stem + "って"
+        elif "suru" in type_str.lower():
+            stem = src_txt.removesuffix("する") # just in case the dictionary def has suru in it already
+            masu_form = stem + "します"
+            te_form = stem + "して"
+    elif "adjective (keiyoushi)" in type_str.lower():
+        if "いい" == src_txt:
+            stem = よ
+        te_form = stem + "くて"  
+        
+    if te_form and insert_if_empty(fields, note, SETTING_TE_DEST_FIELD, te_form):
+        changed = True
+    if masu_form and insert_if_empty(fields, note, SETTING_MASU_DEST_FIELD, masu_form):
+        changed = True
+    return changed
+    
 def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
     # Get the field names
     fields = mw.col.models.field_names(note.note_type())
@@ -198,7 +263,9 @@ def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
                     if insert_if_empty(fields, note, SETTING_TYPE_DEST_FIELD,
                                        parts_of_speech_conversion(src_txt, jmdict_info.get("parts_of_speech_values", ""))):
                         changed = True
-                        
+                if do_conjugation(src_txt, fields, note, jmdict_info.get("parts_of_speech_values", "")):
+                    changed = True
+                
             if config.get(SETTING_ROMAJI_DEST_FIELD) in fields:
                 kana_txt = get_field(fields, note, SETTING_KANA_DEST_FIELD)
                 if insert_if_empty(fields, note, SETTING_ROMAJI_DEST_FIELD, get_romaji(kana_txt)):
@@ -271,6 +338,20 @@ def settings_dialog():
     box_type.addWidget(label_type)
     box_type.addWidget(text_type)
 
+    box_type = QHBoxLayout()
+    label_te = QLabel("-te form field:")
+    text_te = QLineEdit("")
+    text_te.setMinimumWidth(200)
+    box_te.addWidget(label_type)
+    box_te.addWidget(text_type)
+
+    box_type = QHBoxLayout()
+    label_masu = QLabel("-masu form field:")
+    text_masu = QLineEdit("")
+    text_masu.setMinimumWidth(200)
+    box_masu.addWidget(label_type)
+    box_masu.addWidget(text_type)
+
     box_def_nums = QHBoxLayout()
     label_def_nums = QLabel("Number of Defs:")
     text_def_nums = QSpinBox()
@@ -288,6 +369,8 @@ def settings_dialog():
         text_kana.setText(config.get(SETTING_KANA_DEST_FIELD, "not_set"))
         text_romaji.setText(config.get(SETTING_ROMAJI_DEST_FIELD, "not_set"))
         text_type.setText(config.get(SETTING_TYPE_DEST_FIELD, "WordType"))
+        text_te.setText(config.get(SETTING_TE_DEST_FIELD, "not_set"))
+        text_masu.setText(config.get(SETTING_MASU_DEST_FIELD, "not_set"))
         text_def_nums.setValue(config.get(SETTING_NUM_DEFS, 5))
 
     def save_config():
@@ -297,6 +380,8 @@ def settings_dialog():
         config[SETTING_KANA_DEST_FIELD] = text_kana.text()
         config[SETTING_ROMAJI_DEST_FIELD] = text_romaji.text()
         config[SETTING_TYPE_DEST_FIELD] = text_type.text()
+        config[SETTING_TE_DEST_FIELD] = text_te.text()
+        config[SETTING_MASU_DEST_FIELD] = text_masu.text()
         config[SETTING_NUM_DEFS] = text_def_nums.value()
         mw.addonManager.writeConfig(__name__, config)
         dialog.close()
@@ -311,6 +396,8 @@ def settings_dialog():
         layout.addLayout(box_romaji)
         layout.addLayout(box_def)
         layout.addLayout(box_type)
+        layout.addLayout(box_te)
+        layout.addLayout(box_masu)
         layout.addLayout(box_def_nums)
 
         layout.addWidget(ok)
@@ -333,7 +420,8 @@ def init_menu():
 
 def get_field_names_array():
     array = [config.get(SETTING_SRC_FIELD), config.get(SETTING_FURI_DEST_FIELD), config.get(SETTING_KANA_DEST_FIELD), 
-             config.get(SETTING_ROMAJI_DEST_FIELD), config.get(SETTING_TYPE_DEST_FIELD), config.get(SETTING_MEANING_FIELD)]
+             config.get(SETTING_ROMAJI_DEST_FIELD), config.get(SETTING_TYPE_DEST_FIELD), config.get(SETTING_MEANING_FIELD),
+             config.get(SETTING_TE_DEST_FIELD), config.get(SETTING_MASU_DEST_FIELD)]
     return array
 
 
