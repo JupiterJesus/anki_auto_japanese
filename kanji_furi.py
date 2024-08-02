@@ -148,8 +148,12 @@ def search_furigana(data, target_text):
 
 
 def get_romaji(src_txt: str) -> str:
-    romaji_result = wanakana.to_romaji(src_txt)
-    return romaji_result
+    
+    if src_txt:
+        romaji_result = wanakana.to_romaji(src_txt)
+        return romaji_result
+    else:
+        return ""
 
 def parts_of_speech_conversion(src_txt: str, type_str: str) -> str:
     output_str = ""
