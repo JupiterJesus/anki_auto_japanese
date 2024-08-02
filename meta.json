@@ -1,10 +1,1 @@
-{
-  "config": {
-    "furigana_field": "FuriganaField",
-    "definition_field": "Meaning",
-    "kanji_field": "Front",
-    "kana_field": "Reading",
-    "type_field": "WordType",
-    "number_of_defs": 3
-  }
-}
+{"name": "Japanese Automatic Word Definition", "mod": 1717070662, "min_point_version": 231201, "max_point_version": 231201, "branch_index": 0, "disabled": false, "config": {"definition_field": "English Word", "furigana_field": "JapaneseReading", "kana_field": "JapaneseKana", "kanji_field": "JapaneseWord", "masu_field": "Masu", "number_of_defs": 6, "romaji_field": "Romaji", "te_field": "Te", "type_field": "Grammar"}, "conflicts": [], "update_enabled": true}
