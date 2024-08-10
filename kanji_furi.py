@@ -17,6 +17,7 @@ SETTING_FURI_DEST_FIELD = "furigana_field"
 SETTING_KANA_DEST_FIELD = "kana_field"
 SETTING_ROMAJI_DEST_FIELD = "romaji_field"
 SETTING_TYPE_DEST_FIELD = "type_field"
+SETTING_PITCH_DEST_FIELD = "pitch_field"
 SETTING_MASU_DEST_FIELD = "masu_field"
 SETTING_TE_DEST_FIELD = "te_field"
 SETTING_MEANING_FIELD = "definition_field"
@@ -267,7 +268,14 @@ def do_meanings(src_txt: str, fields: list, note: Note, def_num: int, jmdict_inf
                     changed = True;
             
     return changed
-                           
+ 
+def do_pitch(src_txt: str, fields: list, note: Note, def_num: int, jmdict_info) -> str: 
+    changed = False;
+    
+    # TODO Load pitch accent for word
+    # TODO Draw pitch accent svg for word
+    return changed
+    
 def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
     # Get the field names
     fields = mw.col.models.field_names(note.note_type())
@@ -373,6 +381,13 @@ def settings_dialog():
     box_romaji.addWidget(label_romaji)
     box_romaji.addWidget(text_romaji)
 
+    box_pitch = QHBoxLayout()
+    label_pitch = QLabel("Pitch Accent field:")
+    text_pitch = QLineEdit("")
+    text_pitch.setMinimumWidth(200)
+    box_pitch.addWidget(label_pitch)
+    box_pitch.addWidget(text_pitch)
+
     box_type = QHBoxLayout()
     label_type = QLabel("Type field:")
     text_type = QLineEdit("")
@@ -411,6 +426,7 @@ def settings_dialog():
         text_def.setText(config.get(SETTING_ALTERNATES_FIELD, "not_set"))
         text_kana.setText(config.get(SETTING_KANA_DEST_FIELD, "not_set"))
         text_romaji.setText(config.get(SETTING_ROMAJI_DEST_FIELD, "not_set"))
+        text_pitch.setText(config.get(SETTING_PITCH_DEST_FIELD, "not_set"))
         text_type.setText(config.get(SETTING_TYPE_DEST_FIELD, "WordType"))
         text_te.setText(config.get(SETTING_TE_DEST_FIELD, "not_set"))
         text_masu.setText(config.get(SETTING_MASU_DEST_FIELD, "not_set"))
@@ -423,6 +439,7 @@ def settings_dialog():
         config[SETTING_ALTERNATES_FIELD] = text_alt.text()
         config[SETTING_KANA_DEST_FIELD] = text_kana.text()
         config[SETTING_ROMAJI_DEST_FIELD] = text_romaji.text()
+        config[SETTING_PITCH_DEST_FIELD] = text_pitch.text()
         config[SETTING_TYPE_DEST_FIELD] = text_type.text()
         config[SETTING_TE_DEST_FIELD] = text_te.text()
         config[SETTING_MASU_DEST_FIELD] = text_masu.text()
@@ -438,6 +455,7 @@ def settings_dialog():
         layout.addLayout(box_furigana)
         layout.addLayout(box_kana)
         layout.addLayout(box_romaji)
+        layout.addLayout(box_pitch)
         layout.addLayout(box_def)
         layout.addLayout(box_alt)
         layout.addLayout(box_type)
@@ -465,8 +483,9 @@ def init_menu():
 
 def get_field_names_array():
     array = [config.get(SETTING_SRC_FIELD), config.get(SETTING_FURI_DEST_FIELD), config.get(SETTING_KANA_DEST_FIELD), 
-             config.get(SETTING_ROMAJI_DEST_FIELD), config.get(SETTING_TYPE_DEST_FIELD), config.get(SETTING_MEANING_FIELD),
-             config.get(SETTING_TE_DEST_FIELD), config.get(SETTING_MASU_DEST_FIELD), config.get(SETTING_ALTERNATES_FIELD)]
+             config.get(SETTING_ROMAJI_DEST_FIELD), config.get(SETTING_PITCH_DEST_FIELD),config.get(SETTING_TYPE_DEST_FIELD),
+             config.get(SETTING_MEANING_FIELD), config.get(SETTING_TE_DEST_FIELD), config.get(SETTING_MASU_DEST_FIELD),
+             config.get(SETTING_ALTERNATES_FIELD)]
     return array
 
 
@@ -517,6 +536,7 @@ else:
     with open(data_file, "wb") as file:
         pickle.dump(dict_data, file)
 
+# TODO Load nhk pronunciation dictionary
 
 # Create config variable
 config = mw.addonManager.getConfig(__name__)
