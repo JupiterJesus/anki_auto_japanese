@@ -1,9 +1,13 @@
 {
-    "furigana_field": "FuriganaField",
-    "definition_field": "Meaning",
-    "kanji_field": "Front",
-    "kana_field": "Reading",
+    "furigana_field": "JapaneseReading",
+    "definition_field": "English Word", 
+    "alternates_field": "Alternates",
+    "kanji_field": "JapaneseWord",
+    "kana_field": "JapaneseKana",
+    "pitch_field": "Pitch",
     "romaji_field": "Romaji",
-    "type_field": "WordType",
-    "number_of_defs": 5
+    "masu_field": "Masu",
+    "te_field": "Te",
+    "number_of_defs": 6,
+    "type_field": "Grammar"
 }
