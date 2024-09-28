@@ -371,8 +371,8 @@ def settings_dialog():
     label_alt = QLabel("Alternate/additional definitions field:")
     text_alt = QLineEdit("")
     text_alt.setMinimumWidth(200)
-    box_alt.addWidget(label_def)
-    box_alt.addWidget(text_def)
+    box_alt.addWidget(label_alt)
+    box_alt.addWidget(text_alt)
 
     box_kana = QHBoxLayout()
     label_kana = QLabel("Kana field:")
@@ -402,19 +402,19 @@ def settings_dialog():
     box_type.addWidget(label_type)
     box_type.addWidget(text_type)
 
-    box_type = QHBoxLayout()
+    box_te = QHBoxLayout()
     label_te = QLabel("-te form field:")
     text_te = QLineEdit("")
     text_te.setMinimumWidth(200)
-    box_te.addWidget(label_type)
-    box_te.addWidget(text_type)
+    box_te.addWidget(label_te)
+    box_te.addWidget(text_te)
 
-    box_type = QHBoxLayout()
+    box_masu = QHBoxLayout()
     label_masu = QLabel("-masu form field:")
     text_masu = QLineEdit("")
     text_masu.setMinimumWidth(200)
-    box_masu.addWidget(label_type)
-    box_masu.addWidget(text_type)
+    box_masu.addWidget(label_masu)
+    box_masu.addWidget(text_masu)
 
     box_def_nums = QHBoxLayout()
     label_def_nums = QLabel("Number of Defs:")
@@ -444,7 +444,7 @@ def settings_dialog():
         text_query.setText(config.get(SETTING_SRC_FIELD, "not_set"))
         text_furigana.setText(config.get(SETTING_FURI_DEST_FIELD, "not_set"))
         text_def.setText(config.get(SETTING_MEANING_FIELD, "not_set"))
-        text_def.setText(config.get(SETTING_ALTERNATES_FIELD, "not_set"))
+        text_alt.setText(config.get(SETTING_ALTERNATES_FIELD, "not_set"))
         text_kana.setText(config.get(SETTING_KANA_DEST_FIELD, "not_set"))
         text_romaji.setText(config.get(SETTING_ROMAJI_DEST_FIELD, "not_set"))
         text_pitch.setText(config.get(SETTING_PITCH_DEST_FIELD, "not_set"))
@@ -571,6 +571,8 @@ if os.path.isfile(os.path.join(dicts_path + sentences_pickle_file)):
     jsl.load_pickle_file(os.path.join(dicts_path + sentences_pickle_file))
 else:
     jsl = sentence_examples.JapaneseSentenceLib()
+    # TODO change this to use japanese to english
+    #jpn_to_english_sentences.tsv
     # Won't include these in the release... However... can be downloaded from the following.
     # https://tatoeba.org/en/downloads
     jsl.load_sentences_from_file(os.path.join(dicts_path + 'jpn_sentences_detailed.tsv'))
@@ -578,7 +580,6 @@ else:
     jsl.save_pickle_file(os.path.join(dicts_path + sentences_pickle_file))
     
 # TODO Load nhk pronunciation dictionary
-
 # Create config variable
 config = mw.addonManager.getConfig(__name__)
 
