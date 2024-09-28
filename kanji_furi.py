@@ -9,7 +9,7 @@ from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QLineEdit, QDialogButtonBox, QVBoxLayout, QSpinBox
 from anki.notes import Note
 from aqt import gui_hooks, qconnect, mw
-
+from . import sentence_examples
 from . import wanakana
 
 SETTING_SRC_FIELD = "kanji_field"
