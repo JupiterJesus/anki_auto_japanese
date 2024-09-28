@@ -7,7 +7,9 @@
     "pitch_field": "Pitch",
     "romaji_field": "Romaji",
     "masu_field": "Masu",
+    "sentence_field": "Examples"
     "te_field": "Te",
+    "type_field": "Grammar",
     "number_of_defs": 6,
-    "type_field": "Grammar"
+    "number_of_sentences": 3,
 }
