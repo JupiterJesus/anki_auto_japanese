@@ -4,27 +4,40 @@ import json
 import os
 import xml.etree.ElementTree as Et
 import pickle
+import requests
+import base64
+import hashlib
+import pathlib
+import urllib
 
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QLineEdit, QDialogButtonBox, QVBoxLayout, QSpinBox
 from anki.notes import Note
+from anki.media import MediaManager
 from aqt import gui_hooks, qconnect, mw
 from . import sentence_examples
 from . import wanakana
 
-SETTING_SRC_FIELD = "kanji_field"
-SETTING_FURI_DEST_FIELD = "furigana_field"
-SETTING_KANA_DEST_FIELD = "kana_field"
-SETTING_ROMAJI_DEST_FIELD = "romaji_field"
-SETTING_TYPE_DEST_FIELD = "type_field"
-SETTING_PITCH_DEST_FIELD = "pitch_field"
-SETTING_MASU_DEST_FIELD = "masu_field"
-SETTING_TE_DEST_FIELD = "te_field"
-SETTING_MEANING_FIELD = "definition_field"
-SETTING_ALTERNATES_FIELD = "alternates_field"
-SETTING_NUM_DEFS = "number_of_defs"
-SETTING_NUM_SENTENCES = "number_of_sentences"
-SETTING_SENTENCE_DEST_FIELD = "sentence_field"
+SETTING_SRC_FIELD = "kanji_field";
+SETTING_FURI_DEST_FIELD = "furigana_field";
+SETTING_KANA_DEST_FIELD = "kana_field";
+SETTING_ROMAJI_DEST_FIELD = "romaji_field";
+SETTING_TYPE_DEST_FIELD = "type_field";
+SETTING_PITCH_DEST_FIELD = "pitch_field";
+SETTING_MASU_DEST_FIELD = "masu_field";
+SETTING_TE_DEST_FIELD = "te_field";
+SETTING_PAST_DEST_FIELD = "past_field";
+SETTING_NAI_DEST_FIELD = "nai_field";
+SETTING_COND_DEST_FIELD = "cond_field";
+SETTING_VOL_DEST_FIELD = "vol_field";
+SETTING_TAI_DEST_FIELD = "tai_field";
+SETTING_IMP_DEST_FIELD = "imp_field";
+SETTING_MEANING_FIELD = "definition_field";
+SETTING_ALTERNATES_FIELD = "alternates_field";
+SETTING_NUM_DEFS = "number_of_defs";
+SETTING_NUM_SENTENCES = "number_of_sentences";
+SETTING_SENTENCE_DEST_FIELD = "sentence_field";
+SETTING_AUDIO_DEST_FIELD = "audio_field";
 
 # This is used to prevent excessive lookups
 previous_srcTxt = None
@@ -69,6 +82,8 @@ def build_dict_from_xml(root):
             gloss_text = '; '.join(glosses)
             senses[i] = f"{i}: {gloss_text}"
         reb = entry.findall('r_ele/reb')[0].text.strip()
+        if len(keb_entries) == 0:
+          keb_entries.add(reb);  
         for ke in keb_entries:
             if ke not in output:
                 output[ke] = {"parts_of_speech_values": '; '.join(parts_of_speech_values),
@@ -184,64 +199,165 @@ def parts_of_speech_conversion(src_txt: str, type_str: str) -> str:
 
 def do_conjugation(src_txt: str, fields: list, note: Note, type_str: str) -> str:
     changed = False
-    masu_form = ""
-    te_form = ""
-    ending = src_txt[-1:]
-    stem = src_txt[:-1]
+    masu_form = "";
+    te_form = "";
+    past_form = "";
+    nai_form = "";
+    cond_form = "";
+    vol_form = "";
+    tai_form = "";
+    imp_form = "";
+    ending = src_txt[-1:];
+    stem = src_txt[:-1];
     
     if "verb" in type_str.lower():
         if "来る" == src_txt:
-            masu_form = stem + "きます"
-            te_form = stem + "来て"
+            masu_form = "来[き]ます";
+            te_form = "来[き]て";
+            past_form = "来[き]た";
+            nai_form = "来[こ]ない【です】 ／ 来[こ]なかった【です】";
+            cond_form = "来[く]れば～ ／ 来[き]たら～";
+            ｖol_form = "来[く]よう";
+            tai_form = "来[き]たい【です】";
+            imp_form = "来[こ]い ／ 来[き]てください ／ 来[き]なさい";
         elif "する" == src_txt:
-            masu_form = stem + "します"
-            te_form = stem + "して"
+            masu_form = "します";
+            te_form = "して";
+            past_form = "した";
+            nai_form = "しない【です】／しなかった【です】";
+            cond_form = "すれば～ ／ したら～";
+            vol_form = "しろ";
+            tai_form = "したい【です】";
+            imp_form = "しろ ／ してください ／ しなさい";
         elif "ichidan" in type_str.lower():
             masu_form = stem + "ます"
             te_form = stem + "て"
+            past_form = stem + "た";
+            nai_form = stem + "ない【です】／ " + stem + "なかった【です】";
+            cond_form = stem + "れば～ ／ " + stem + "たら～";
+            vol_form = stem + "よう";
+            tai_form = stem + "たい【です】";
+            imp_form = stem + "ろ ／ " + stem + "てください ／ "+ stem + "なさい";
         elif "godan" in type_str.lower():
             if "す" == ending:
-                masu_form = stem + "します"
-                te_form = stem + "して"
+                masu_form = stem + "します";
+                te_form = stem + "して";
+                past_form = stem + "した";
+                nai_form = stem + "さない【です】／ " + stem + "さなかった【です】";
+                cond_form = stem + "せば～ ／ " + stem + "したら～";
+                vol_form = stem + "そう";
+                tai_form = stem + "したい【です】";
+                imp_form = stem + "せ ／ " + stem + "してください ／ "+ stem + "しなさい";
             elif "る" == ending:
-                masu_form = stem + "ります"
-                te_form = stem + "って"
+                masu_form = stem + "ります";
+                te_form = stem + "って";
+                past_form = stem + "った";
+                nai_form = stem + "らない【です】／" + stem + "らなかった【です】";
+                cond_form = stem + "れば～ ／ " + stem + "ったら～";
+                vol_form = stem + "ろう";
+                tai_form = stem + "りたい【です】";
+                imp_form = stem + "れ／" + stem + "ってください／"+ stem + "りなさい";
             elif "む" == ending:
-                masu_form = stem + "みます"
-                te_form = stem + "んで"
+                masu_form = stem + "みます";
+                te_form = stem + "んで";
+                past_form = stem + "";
+                nai_form = stem + "さない【です】／" + stem + "さなかった【です】";
+                cond_form = stem + "めば～ ／ " + stem + "んだら～";
+                vol_form = stem + "もう";
+                tai_form = stem + "みたい【です】";
+                imp_form = stem + "め／" + stem + "んでください／"+ stem + "みなさい";
             elif "ぶ" == ending:
-                masu_form = stem + "びます"
-                te_form = stem + "んで"
+                masu_form = stem + "びます";
+                te_form = stem + "んで";
+                past_form = stem + "んだ";
+                nai_form = stem + "ばない【です】／" + stem + "ばなかった【です】";
+                cond_form = stem + "べば～ ／ " + stem + "んだら～";
+                vol_form = stem + "ぼう";
+                tai_form = stem + "びたい【です】";
+                imp_form = stem + "べ／" + stem + "んでください／"+ stem + "びなさい";
             elif "ぬ" == ending:
-                masu_form = stem + "にます"
-                te_form = stem + "んで"
+                masu_form = stem + "にます";
+                te_form = stem + "んで";
+                past_form = stem + "んだ";
+                nai_form = stem + "なない【です】／" + stem + "ななかった【です】";
+                cond_form = stem + "ねば～ ／ " + stem + "んだら～";
+                vol_form = stem + "のう";
+                tai_form = stem + "にたい【です】";
+                imp_form = stem + "ね／" + stem + "んでください／"+ stem + "になさい";
             elif "つ" == ending:
                 masu_form = stem + "ちます"
-                te_form = stem + "って"
+                te_form = stem + "って";
+                past_form = stem + "った";
+                nai_form = stem + "たない【です】／" + stem + "たなかった【です】";
+                cond_form = stem + "てば～ ／ " + stem + "ったら～";
+                vol_form = stem + "とう";
+                tai_form = stem + "ちたい【です】";
+                imp_form = stem + "て／" + stem + "ってください／"+ stem + "ちなさい";
             elif "く" == ending:
-                masu_form = stem + "きます"
+                masu_form = stem + "きます";
                 if stem == "行":
                     te_form = stem + "って"
+                    past_form = stem + "った";
+                    imp_form = stem + "け／" + stem + "ってください／"+ stem + "きなさい";
+                    cond_form = stem + "けば～ ／ " + stem + "ったら～";
                 else:
                     te_form = stem + "いて"
+                    past_form = stem + "いた";
+                    imp_form = stem + "け／" + stem + "いてください／"+ stem + "きなさい";
+                    cond_form = stem + "けば～ ／ " + stem + "いたら～";
+                nai_form = stem + "かない【です】／" + stem + "かなかった【です】";
+                vol_form = stem + "こう";
+                tai_form = stem + "きたい【です】";
             elif "ぐ" == ending:
-                masu_form = stem + "ぎます"
-                te_form = stem + "いで"
+                masu_form = stem + "ぎます";
+                te_form = stem + "いで";
+                past_form = "いだ";
+                nai_form = stem + "がない【です】／" + stem + "がなかった【です】";
+                cond_form = "げば～ ／ " + stem + "いだら～";
+                vol_form = "ごう";
+                tai_form = stem + "ぎたい【です】";
+                imp_form = stem + "げ／" + stem + "いでください／"+ stem + "ぎなさい";
             elif "う" == ending:
-                masu_form = stem + "います"
-                te_form = stem + "って"
+                masu_form = stem + "います";
+                te_form = stem + "って";
+                past_form = "った";
+                nai_form = stem + "わない【です】／" + stem + "わなかった【です】";
+                cond_form = "えば～ ／ " + stem + "ったら～";
+                vol_form = "おう";
+                tai_form = stem + "いたい【です】";
+                imp_form = stem + "え／" + stem + "ってください／"+ stem + "いなさい";
         elif "suru" in type_str.lower():
             stem = src_txt.removesuffix("する") # just in case the dictionary def has suru in it already
-            masu_form = stem + "します"
-            te_form = stem + "して"
+            masu_form = stem + "します";
+            te_form = stem + "して";
+            past_form = stem + "した";
+            nai_form = stem + "しない【です】／" + stem + "しなかった【です】";
+            cond_form = stem + "すれば～ ／ " + stem + "したら～";
+            vol_form = stem + "しろ";
+            tai_form = stem + "したい【です】";
+            imp_form = stem + "しろ／" + stem + "してください／"+ stem + "しなさい";
     elif "adjective (keiyoushi)" in type_str.lower():
         if "いい" == src_txt:
-            stem = よ
-        te_form = stem + "くて"  
+            stem = よ;
+        te_form = stem + "くて";
+        past_form = stem + "かった";
+        nai_form = stem + "くない【です】／" + stem + "くなかった【です】";
         
+    if masu_form and insert_if_empty(fields, note, SETTING_MASU_DEST_FIELD, masu_form):
+        changed = True
     if te_form and insert_if_empty(fields, note, SETTING_TE_DEST_FIELD, te_form):
         changed = True
-    if masu_form and insert_if_empty(fields, note, SETTING_MASU_DEST_FIELD, masu_form):
+    if past_form and insert_if_empty(fields, note, SETTING_PAST_DEST_FIELD, past_form):
+        changed = True
+    if nai_form and insert_if_empty(fields, note, SETTING_NAI_DEST_FIELD, nai_form):
+        changed = True
+    if cond_form and insert_if_empty(fields, note, SETTING_COND_DEST_FIELD, cond_form):
+        changed = True
+    if vol_form and insert_if_empty(fields, note, SETTING_VOL_DEST_FIELD, vol_form):
+        changed = True
+    if tai_form and insert_if_empty(fields, note, SETTING_TAI_DEST_FIELD, tai_form):
+        changed = True
+    if imp_form and insert_if_empty(fields, note, SETTING_IMP_DEST_FIELD, imp_form):
         changed = True
     return changed
   
@@ -271,11 +387,47 @@ def do_meanings(src_txt: str, fields: list, note: Note, def_num: int, jmdict_inf
             
     return changed
  
-def do_pitch(src_txt: str, fields: list, note: Note, def_num: int, jmdict_info) -> str: 
+def do_pitch(src_txt: str, fields: list, note: Note, jmdict_info) -> str: 
     changed = False;
     
     # TODO Load pitch accent for word
     # TODO Draw pitch accent svg for word
+    return changed
+ 
+def do_audio(word: str, kana: str, fields: list, note: Note, jmdict_info) -> str: 
+
+    changed = False;
+    dest_field = config[SETTING_AUDIO_DEST_FIELD]
+    if dest_field in fields:
+        if note[dest_field] != "":
+            return changed;
+            
+    if config.get(SETTING_AUDIO_DEST_FIELD) in fields:
+      # Download audio
+      # If audio downloaded, append it
+      filename = "jpod-" + word + "-" + kana + ".mp3";
+      #print("Word: " + word);
+      #print("Kana: " + kana);
+      #print("Filename: " + filename);
+
+      temp_dir = os.path.join(pathlib.Path(__file__).parent.absolute(), "temp");
+      dl_path = os.path.join(temp_dir, filename);
+      #print("DL Path: " + dl_path);
+      
+      
+      jpod_url = get_jpod_audio_url(urllib.parse.quote(word) if word else "", urllib.parse.quote(kana) if kana else "")
+      #print("JPOD Url: " + jpod_url);
+      if jpod_url:
+          jpod_audio = get_jpod_audio(jpod_url);
+          if jpod_audio:
+            with open(dl_path, "wb") as f:
+                f.write(jpod_audio.read());
+                jpod_audio.close();
+          
+            audio_filename = note.col.media.add_file(dl_path);
+            #print("Media: " + audio_filename);
+            changed = insert_if_empty(fields, note, SETTING_AUDIO_DEST_FIELD, "[sound:" + audio_filename + "]");
+        
     return changed
     
 def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
@@ -294,15 +446,19 @@ def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
                 if insert_if_empty(fields, note, SETTING_FURI_DEST_FIELD, search_furigana(jmdict_furi_data, src_txt)):
                     changed = True
             
-            jmdict_info = dict_data.get(src_txt, None)
+            kana_txt = get_field(fields, note, SETTING_KANA_DEST_FIELD);
+            def_num = config[SETTING_NUM_DEFS]
+            
+            jmdict_info = dict_data.get(src_txt, None);
             if jmdict_info is not None:
-                def_num = config[SETTING_NUM_DEFS]
+                
                 if do_meanings(src_txt, fields, note, def_num, jmdict_info):
-                    changed = True
-                    
+                    changed = True;
+                 
                 if config.get(SETTING_KANA_DEST_FIELD) in fields:
                     if insert_if_empty(fields, note, SETTING_KANA_DEST_FIELD, jmdict_info.get("reb", "")):
-                        changed = True
+                        changed = True 
+                    kana_txt = get_field(fields, note, SETTING_KANA_DEST_FIELD);
                         
                 if config.get(SETTING_TYPE_DEST_FIELD) in fields:
                     if insert_if_empty(fields, note, SETTING_TYPE_DEST_FIELD, parts_of_speech_conversion(src_txt, jmdict_info.get("parts_of_speech_values", ""))):
@@ -315,11 +471,15 @@ def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
                     
                 if do_conjugation(src_txt, fields, note, jmdict_info.get("parts_of_speech_values", "")):
                     changed = True
-                
+            
+                    
+            if config.get(SETTING_AUDIO_DEST_FIELD) in fields:
+                if do_audio(src_txt, kana_txt, fields, note, jmdict_info):
+                    changed = True;
+                    
             if config.get(SETTING_ROMAJI_DEST_FIELD) in fields:
-                kana_txt = get_field(fields, note, SETTING_KANA_DEST_FIELD)
                 if insert_if_empty(fields, note, SETTING_ROMAJI_DEST_FIELD, get_romaji(kana_txt)):
-                    changed = True
+                    changed = True;
     return changed
 
 
@@ -333,13 +493,69 @@ def insert_if_empty(fields: list, note: Note, dest_config: str, new_text: str):
         return True
 
 
+def append_field(fields: list, note: Note, dest_config: str, new_text: str):
+    if new_text == "":
+        return False
+    dest_field = config[dest_config]
+    if dest_field in fields:
+        note[dest_field] = note[dest_field] + new_text
+        return True
+
+
 def get_field(fields: list, note: Note, dest_config: str):
     dest_field = config[dest_config]
     if dest_field in fields:
         return note[dest_field]
     return ""
 
+def get_jpod_audio(url):
+    try:
+        #requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+        req = urllib.request.Request(url)
+        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:106.0) Gecko/20100101 Firefox/106.0')
+        #req.add_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8')
+        #req.add_header('Accept-Language', 'en-US,en;q=0.5')
 
+        r = urllib.request.urlopen(req);
+
+        #r = requests.get(url, verify=False, timeout=5)
+        return r
+    except Exception as inst:
+        print("EXCEPTION doing request!");
+        print(inst);
+        return None
+
+def validate_jpod_audio_url(url):
+    jpod_audio = get_jpod_audio(url)
+    if jpod_audio:
+        size = jpod_audio.headers.get('content-length')
+        return size != "52288"; # invalid audio
+    else:
+        return False
+
+def audioIsPlaceholder(data):
+    m = hashlib.md5()
+    m.update(data)
+    return m.hexdigest() == '7e2c2f954ef6051373ba916f000168dc'
+
+def get_jpod_audio_url(kanji, kana):
+    if (kanji == ""):
+      url = 'https://assets.languagepod101.com/dictionary/japanese/audiomp3.php?kana={}'.format(kana)
+    else:
+      url = 'https://assets.languagepod101.com/dictionary/japanese/audiomp3.php?kanji={}&kana={}'.format(kanji, kana)
+    print("url: " + url);
+    return url if (validate_jpod_audio_url(url)) else ''
+
+def get_jpod_audio_base64(kanji, kana):
+    jpod_url = get_jpod_audio_url(kanji, kana)
+    if jpod_url:
+        jpod_audio = get_jpod_audio(jpod_url)
+        if jpod_audio:
+            return 'data:audio/mp3;base64,' + str(base64.b64encode(jpod_audio.content))
+        else:
+            return ''
+    return ''
+    
 def settings_dialog():
     dialog = QDialog(mw)
     dialog.setWindowTitle("Furigana Addon")
@@ -395,26 +611,19 @@ def settings_dialog():
     box_pitch.addWidget(label_pitch)
     box_pitch.addWidget(text_pitch)
 
+    box_audio = QHBoxLayout()
+    label_audio = QLabel("Audio field:")
+    text_audio = QLineEdit("")
+    text_audio.setMinimumWidth(200)
+    box_audio.addWidget(label_audio)
+    box_audio.addWidget(text_audio)
+
     box_type = QHBoxLayout()
     label_type = QLabel("Type field:")
     text_type = QLineEdit("")
     text_type.setMinimumWidth(200)
     box_type.addWidget(label_type)
     box_type.addWidget(text_type)
-
-    box_te = QHBoxLayout()
-    label_te = QLabel("-te form field:")
-    text_te = QLineEdit("")
-    text_te.setMinimumWidth(200)
-    box_te.addWidget(label_te)
-    box_te.addWidget(text_te)
-
-    box_masu = QHBoxLayout()
-    label_masu = QLabel("-masu form field:")
-    text_masu = QLineEdit("")
-    text_masu.setMinimumWidth(200)
-    box_masu.addWidget(label_masu)
-    box_masu.addWidget(text_masu)
 
     box_def_nums = QHBoxLayout()
     label_def_nums = QLabel("Number of Defs:")
@@ -436,6 +645,62 @@ def settings_dialog():
     text_sentc_nums.setMinimumWidth(200)
     box_sentc_nums.addWidget(label_sentc_nums)
     box_sentc_nums.addWidget(text_sentc_nums)
+
+    box_te = QHBoxLayout()
+    label_te = QLabel("-te form field:")
+    text_te = QLineEdit("")
+    text_te.setMinimumWidth(200)
+    box_te.addWidget(label_te)
+    box_te.addWidget(text_te)
+
+    box_masu = QHBoxLayout()
+    label_masu = QLabel("-masu form field:")
+    text_masu = QLineEdit("")
+    text_masu.setMinimumWidth(200)
+    box_masu.addWidget(label_masu)
+    box_masu.addWidget(text_masu)
+
+    box_past = QHBoxLayout()
+    label_past = QLabel("plain past form field:")
+    text_past = QLineEdit("")
+    text_past.setMinimumWidth(200)
+    box_past.addWidget(label_past)
+    box_past.addWidget(text_past)
+    
+    box_nai = QHBoxLayout()
+    label_nai = QLabel("negative/nai form field:")
+    text_nai = QLineEdit("")
+    text_nai.setMinimumWidth(200)
+    box_nai.addWidget(label_nai)
+    box_nai.addWidget(text_nai)
+    
+    box_cond_ = QHBoxLayout()
+    label_cond_ = QLabel("conditional/ba form field:")
+    text_cond_ = QLineEdit("")
+    text_cond_.setMinimumWidth(200)
+    box_cond_.addWidget(label_cond_)
+    box_cond_.addWidget(text_cond_)
+    
+    box_vol = QHBoxLayout()
+    label_vol = QLabel("volitional form field:")
+    text_vol = QLineEdit("")
+    text_vol.setMinimumWidth(200)
+    box_vol.addWidget(label_vol)
+    box_vol.addWidget(text_vol)
+    
+    box_tai = QHBoxLayout()
+    label_tai = QLabel("wanting/-tai form field:")
+    text_tai = QLineEdit("")
+    text_tai.setMinimumWidth(200)
+    box_tai.addWidget(label_tai)
+    box_tai.addWidget(text_tai)
+    
+    box_imp = QHBoxLayout()
+    label_imp = QLabel("imperative forms field:")
+    text_imp = QLineEdit("")
+    text_imp.setMinimumWidth(200)
+    box_imp.addWidget(label_imp)
+    box_imp.addWidget(text_imp)
     
     ok = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
     cancel = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
@@ -444,86 +709,125 @@ def settings_dialog():
         text_query.setText(config.get(SETTING_SRC_FIELD, "not_set"))
         text_furigana.setText(config.get(SETTING_FURI_DEST_FIELD, "not_set"))
         text_def.setText(config.get(SETTING_MEANING_FIELD, "not_set"))
+        text_def.setText(config.get(SETTING_AUDIO_DEST_FIELD, "not_set"))
         text_alt.setText(config.get(SETTING_ALTERNATES_FIELD, "not_set"))
         text_kana.setText(config.get(SETTING_KANA_DEST_FIELD, "not_set"))
         text_romaji.setText(config.get(SETTING_ROMAJI_DEST_FIELD, "not_set"))
         text_pitch.setText(config.get(SETTING_PITCH_DEST_FIELD, "not_set"))
         text_type.setText(config.get(SETTING_TYPE_DEST_FIELD, "WordType"))
-        text_te.setText(config.get(SETTING_TE_DEST_FIELD, "not_set"))
-        text_masu.setText(config.get(SETTING_MASU_DEST_FIELD, "not_set"))
         text_def_nums.setValue(config.get(SETTING_NUM_DEFS, 5))
         text_sentence.setText(config.get(SETTING_SENTENCE_DEST_FIELD, "Examples"))
         text_sentc_nums.setValue(config.get(SETTING_NUM_SENTENCES, 3))
+        text_masu.setText(config.get(SETTING_MASU_DEST_FIELD, "not_set"))
+        text_te.setText(config.get(SETTING_TE_DEST_FIELD, "not_set"))
+        text_past.setText(config.get(SETTING_PAST_DEST_FIELD, "not_set"))
+        text_nai.setText(config.get(SETTING_NAI_DEST_FIELD, "not_set"))
+        text_cond_.setText(config.get(SETTING_COND_DEST_FIELD, "not_set"))
+        text_vol.setText(config.get(SETTING_VOL_DEST_FIELD, "not_set"))
+        text_tai.setText(config.get(SETTING_TAI_DEST_FIELD, "not_set"))
+        text_imp.setText(config.get(SETTING_IMP_DEST_FIELD, "not_set"))
 
     def save_config():
-        config[SETTING_SRC_FIELD] = text_query.text()
-        config[SETTING_FURI_DEST_FIELD] = text_furigana.text()
-        config[SETTING_MEANING_FIELD] = text_def.text()
-        config[SETTING_ALTERNATES_FIELD] = text_alt.text()
-        config[SETTING_KANA_DEST_FIELD] = text_kana.text()
-        config[SETTING_ROMAJI_DEST_FIELD] = text_romaji.text()
-        config[SETTING_PITCH_DEST_FIELD] = text_pitch.text()
-        config[SETTING_TYPE_DEST_FIELD] = text_type.text()
-        config[SETTING_TE_DEST_FIELD] = text_te.text()
-        config[SETTING_MASU_DEST_FIELD] = text_masu.text()
-        config[SETTING_NUM_DEFS] = text_def_nums.value()
-        config[SETTING_SENTENCE_DEST_FIELD] = text_sentence.text()
-        config[SETTING_NUM_SENTENCES] = text_sentc_nums.value()
-        mw.addonManager.writeConfig(__name__, config)
+        config[SETTING_SRC_FIELD] = text_query.text();
+        config[SETTING_FURI_DEST_FIELD] = text_furigana.text();
+        config[SETTING_MEANING_FIELD] = text_def.text();
+        config[SETTING_ALTERNATES_FIELD] = text_alt.text();
+        config[SETTING_KANA_DEST_FIELD] = text_kana.text();
+        config[SETTING_AUDIO_DEST_FIELD] = text_audio.text();
+        config[SETTING_ROMAJI_DEST_FIELD] = text_romaji.text();
+        config[SETTING_PITCH_DEST_FIELD] = text_pitch.text();
+        config[SETTING_TYPE_DEST_FIELD] = text_type.text();
+        config[SETTING_NUM_DEFS] = text_def_nums.value();
+        config[SETTING_SENTENCE_DEST_FIELD] = text_sentence.text();
+        config[SETTING_NUM_SENTENCES] = text_sentc_nums.value();
+        config[SETTING_MASU_DEST_FIELD] = text_masu.text();
+        config[SETTING_TE_DEST_FIELD] = text_te.text();
+        config[SETTING_PAST_DEST_FIELD] = text_past.text();
+        config[SETTING_NAI_DEST_FIELD] = text_nai.text();
+        config[SETTING_COND_DEST_FIELD] = text_cond_.text();
+        config[SETTING_VOL_DEST_FIELD] = text_vol.text();
+        config[SETTING_TAI_DEST_FIELD] = text_tai.text();
+        config[SETTING_IMP_DEST_FIELD] = text_imp.text();
         
-        dialog.close()
+        mw.addonManager.writeConfig(__name__, config);
+        
+        dialog.close();
 
     def layout_everything():
-        layout = QVBoxLayout()
-        dialog.setLayout(layout)
+        layout = QVBoxLayout();
+        dialog.setLayout(layout);
 
-        layout.addLayout(box_query)
-        layout.addLayout(box_furigana)
-        layout.addLayout(box_kana)
-        layout.addLayout(box_romaji)
-        layout.addLayout(box_pitch)
-        layout.addLayout(box_def)
-        layout.addLayout(box_alt)
-        layout.addLayout(box_type)
-        layout.addLayout(box_te)
-        layout.addLayout(box_masu)
-        layout.addLayout(box_def_nums)
-        layout.addLayout(box_sentence)
-        layout.addLayout(box_sentc_nums)
+        layout.addLayout(box_query);
+        layout.addLayout(box_furigana);
+        layout.addLayout(box_kana);
+        layout.addLayout(box_romaji);
+        layout.addLayout(box_pitch);
+        layout.addLayout(box_audio);
+        layout.addLayout(box_def);
+        layout.addLayout(box_alt);
+        layout.addLayout(box_type);
+        layout.addLayout(box_def_nums);
+        layout.addLayout(box_sentence);
+        layout.addLayout(box_sentc_nums);
+        
+        layout.addLayout(box_masu);
+        layout.addLayout(box_te);
+        layout.addLayout(box_past);
+        layout.addLayout(box_nai);
+        layout.addLayout(box_cond_);
+        layout.addLayout(box_vol);
+        layout.addLayout(box_tai);
+        layout.addLayout(box_imp);
 
-        layout.addWidget(ok)
-        layout.addWidget(cancel)
+        layout.addWidget(ok);
+        layout.addWidget(cancel);
 
-    init_configui()
-    ok.clicked.connect(save_config)
-    cancel.clicked.connect(dialog.close)
+    init_configui();
+    ok.clicked.connect(save_config);
+    cancel.clicked.connect(dialog.close);
 
-    layout_everything()
+    layout_everything();
 
-    dialog.exec()
+    dialog.exec();
 
 
 def init_menu():
-    action = QAction("Furigana Addon Settings", mw)
-    qconnect(action.triggered, settings_dialog)
-    mw.form.menuTools.addAction(action)
+    action = QAction("Furigana Addon Settings", mw);
+    qconnect(action.triggered, settings_dialog);
+    mw.form.menuTools.addAction(action);
 
 
 def get_field_names_array():
-    array = [config.get(SETTING_SRC_FIELD), config.get(SETTING_FURI_DEST_FIELD), config.get(SETTING_KANA_DEST_FIELD), 
-             config.get(SETTING_ROMAJI_DEST_FIELD), config.get(SETTING_PITCH_DEST_FIELD),config.get(SETTING_TYPE_DEST_FIELD),
-             config.get(SETTING_MEANING_FIELD), config.get(SETTING_TE_DEST_FIELD), config.get(SETTING_MASU_DEST_FIELD),
-             config.get(SETTING_ALTERNATES_FIELD), config.get(SETTING_SENTENCE_DEST_FIELD)]
-    return array
+    array = [
+             config.get(SETTING_SRC_FIELD), 
+             config.get(SETTING_FURI_DEST_FIELD), 
+             config.get(SETTING_KANA_DEST_FIELD), 
+             config.get(SETTING_ROMAJI_DEST_FIELD), 
+             config.get(SETTING_PITCH_DEST_FIELD),
+             config.get(SETTING_TYPE_DEST_FIELD),
+             config.get(SETTING_MEANING_FIELD),
+             config.get(SETTING_ALTERNATES_FIELD),
+             config.get(SETTING_SENTENCE_DEST_FIELD),
+             config.get(SETTING_AUDIO_DEST_FIELD),
+             config.get(SETTING_MASU_DEST_FIELD),
+             config.get(SETTING_TE_DEST_FIELD),
+             config.get(SETTING_PAST_DEST_FIELD),
+             config.get(SETTING_NAI_DEST_FIELD),
+             config.get(SETTING_COND_DEST_FIELD),
+             config.get(SETTING_VOL_DEST_FIELD),
+             config.get(SETTING_TAI_DEST_FIELD),
+             config.get(SETTING_IMP_DEST_FIELD)
+            ];
+    return array;
 
 
 def clear_fields(editor):
-    fields = mw.col.models.field_names(editor.note.note_type())
-    dest_fields = get_field_names_array()
+    fields = mw.col.models.field_names(editor.note.note_type());
+    dest_fields = get_field_names_array();
     for field in fields:
         if field in dest_fields:
-            editor.note[field] = ""
-    editor.loadNote()
+            editor.note[field] = "";
+    editor.loadNote();
 
 
 def editor_button_setup(buttons, editor):
@@ -534,16 +838,16 @@ def editor_button_setup(buttons, editor):
                            'clear_fields',
                            clear_fields,
                            tip='Clear fields')
-    buttons.append(btn)
+    buttons.append(btn);
 
 
 # GUI Hooks
-gui_hooks.editor_did_unfocus_field.append(on_focus_lost)
-gui_hooks.editor_did_init_buttons.append(editor_button_setup)
+gui_hooks.editor_did_unfocus_field.append(on_focus_lost);
+gui_hooks.editor_did_init_buttons.append(editor_button_setup);
 
 # Dictionary Furigana Dictionary
 with open(os.path.join(dicts_path + 'JmdictFurigana.json'), 'r', encoding='utf-8-sig') as f:
-    jmdict_furi_data = json.load(f)
+    jmdict_furi_data = json.load(f);
 
 # JMDict Data Load
 data_file = os.path.join(dicts_path + 'dill.pkl') # DIctionary LLoad?
@@ -567,21 +871,20 @@ else:
 # Begin Section for example sentences
 sentences_pickle_file = 'sentences.pickle'
 if os.path.isfile(os.path.join(dicts_path + sentences_pickle_file)):
-    jsl = sentence_examples.JapaneseSentenceLib()
-    jsl.load_pickle_file(os.path.join(dicts_path + sentences_pickle_file))
+    jsl = sentence_examples.JapaneseSentenceLib();
+    jsl.load_pickle_file(os.path.join(dicts_path + sentences_pickle_file));
 else:
-    jsl = sentence_examples.JapaneseSentenceLib()
-    # TODO change this to use japanese to english
-    #jpn_to_english_sentences.tsv
+    jsl = sentence_examples.JapaneseSentenceLib();
+
     # Won't include these in the release... However... can be downloaded from the following.
     # https://tatoeba.org/en/downloads
-    jsl.load_sentences_from_file(os.path.join(dicts_path + 'jpn_sentences_detailed.tsv'))
-    jsl.load_sentence_rating_data(os.path.join(dicts_path + 'users_sentences.csv'))
-    jsl.save_pickle_file(os.path.join(dicts_path + sentences_pickle_file))
+    jsl.load_sentences_from_file(os.path.join(dicts_path + 'translated_sentences.tsv'));
+    jsl.load_sentence_rating_data(os.path.join(dicts_path + 'users_sentences.csv'));
+    jsl.save_pickle_file(os.path.join(dicts_path + sentences_pickle_file));
     
 # TODO Load nhk pronunciation dictionary
 # Create config variable
-config = mw.addonManager.getConfig(__name__)
+config = mw.addonManager.getConfig(__name__);
 
 # Add the options to the menu
-init_menu()
+init_menu();
