@@ -343,21 +343,21 @@ def do_conjugation(src_txt: str, fields: list, note: Note, type_str: str) -> str
         past_form = stem + "かった";
         nai_form = stem + "くない【です】／" + stem + "くなかった【です】";
         
-    if masu_form and insert_if_empty(fields, note, SETTING_MASU_DEST_FIELD, masu_form):
+    if masu_form and replace_field(fields, note, SETTING_MASU_DEST_FIELD, masu_form):
         changed = True
-    if te_form and insert_if_empty(fields, note, SETTING_TE_DEST_FIELD, te_form):
+    if te_form and replace_field(fields, note, SETTING_TE_DEST_FIELD, te_form):
         changed = True
-    if past_form and insert_if_empty(fields, note, SETTING_PAST_DEST_FIELD, past_form):
+    if past_form and replace_field(fields, note, SETTING_PAST_DEST_FIELD, past_form):
         changed = True
-    if nai_form and insert_if_empty(fields, note, SETTING_NAI_DEST_FIELD, nai_form):
+    if nai_form and replace_field(fields, note, SETTING_NAI_DEST_FIELD, nai_form):
         changed = True
-    if cond_form and insert_if_empty(fields, note, SETTING_COND_DEST_FIELD, cond_form):
+    if cond_form and replace_field(fields, note, SETTING_COND_DEST_FIELD, cond_form):
         changed = True
-    if vol_form and insert_if_empty(fields, note, SETTING_VOL_DEST_FIELD, vol_form):
+    if vol_form and replace_field(fields, note, SETTING_VOL_DEST_FIELD, vol_form):
         changed = True
-    if tai_form and insert_if_empty(fields, note, SETTING_TAI_DEST_FIELD, tai_form):
+    if tai_form and replace_field(fields, note, SETTING_TAI_DEST_FIELD, tai_form):
         changed = True
-    if imp_form and insert_if_empty(fields, note, SETTING_IMP_DEST_FIELD, imp_form):
+    if imp_form and replace_field(fields, note, SETTING_IMP_DEST_FIELD, imp_form):
         changed = True
     return changed
   
@@ -376,12 +376,12 @@ def do_meanings(src_txt: str, fields: list, note: Note, def_num: int, jmdict_inf
                 if insert_if_empty(fields, note, SETTING_MEANING_FIELD, primary):
                     changed = True;
                 if senses:
-                    alternates = "<br>".join(senses)
+                    alternates = "<br>".join(senses);
                     if insert_if_empty(fields, note, SETTING_ALTERNATES_FIELD, alternates):
                         changed = True;
         else: # otherwise, we just put all meanings into a list in the meaning field
             if senses:
-                defs = "<br>".join(senses)
+                defs = "<br>".join(senses);
                 if insert_if_empty(fields, note, SETTING_MEANING_FIELD, defs):
                     changed = True;
             
@@ -392,7 +392,7 @@ def do_pitch(src_txt: str, fields: list, note: Note, jmdict_info) -> str:
     
     # TODO Load pitch accent for word
     # TODO Draw pitch accent svg for word
-    return changed
+    return changed;
  
 def do_audio(word: str, kana: str, fields: list, note: Note, jmdict_info) -> str: 
 
@@ -432,19 +432,19 @@ def do_audio(word: str, kana: str, fields: list, note: Note, jmdict_info) -> str
     
 def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
     # Get the field names
-    fields = mw.col.models.field_names(note.note_type())
+    fields = mw.col.models.field_names(note.note_type());
     # Get the modified field
     modified_field = fields[current_field_index]
     # Check if it's the same as config, if so proceed
     if modified_field == config[SETTING_SRC_FIELD]:
         # Strip for good measure
-        src_txt = mw.col.media.strip(note[modified_field])
+        src_txt = mw.col.media.strip(note[modified_field]);
         if src_txt != "" and (previous_srcTxt is None or src_txt != previous_srcTxt):
             
             # Added the field checks for people who don't have all fields for whatever reason
             if config.get(SETTING_FURI_DEST_FIELD) in fields:
                 if insert_if_empty(fields, note, SETTING_FURI_DEST_FIELD, search_furigana(jmdict_furi_data, src_txt)):
-                    changed = True
+                    changed = True;
             
             kana_txt = get_field(fields, note, SETTING_KANA_DEST_FIELD);
             def_num = config[SETTING_NUM_DEFS]
@@ -457,20 +457,20 @@ def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
                  
                 if config.get(SETTING_KANA_DEST_FIELD) in fields:
                     if insert_if_empty(fields, note, SETTING_KANA_DEST_FIELD, jmdict_info.get("reb", "")):
-                        changed = True 
+                        changed = True;
                     kana_txt = get_field(fields, note, SETTING_KANA_DEST_FIELD);
                         
                 if config.get(SETTING_TYPE_DEST_FIELD) in fields:
                     if insert_if_empty(fields, note, SETTING_TYPE_DEST_FIELD, parts_of_speech_conversion(src_txt, jmdict_info.get("parts_of_speech_values", ""))):
-                        changed = True
+                        changed = True;
                         
                 if config.get(SETTING_SENTENCE_DEST_FIELD) in fields:
-                    sentence_num = config[SETTING_NUM_SENTENCES]
+                    sentence_num = config[SETTING_NUM_SENTENCES];
                     if insert_if_empty(fields, note, SETTING_SENTENCE_DEST_FIELD, jsl.find_example_sentences_by_word_formatted(src_txt, sentence_num)):
-                        changed = True
+                        changed = True;
                     
                 if do_conjugation(src_txt, fields, note, jmdict_info.get("parts_of_speech_values", "")):
-                    changed = True
+                    changed = True;
             
                     
             if config.get(SETTING_AUDIO_DEST_FIELD) in fields:
@@ -485,28 +485,37 @@ def on_focus_lost(changed: bool, note: Note, current_field_index: int) -> bool:
 
 def insert_if_empty(fields: list, note: Note, dest_config: str, new_text: str):
     if new_text == "":
-        return False
-    dest_field = config[dest_config]
+        return False;
+    dest_field = config[dest_config];
     if dest_field in fields:
         if note[dest_field] == "":
-            note[dest_field] = new_text
-        return True
-
+            note[dest_field] = new_text;
+        return True;
 
 def append_field(fields: list, note: Note, dest_config: str, new_text: str):
     if new_text == "":
-        return False
-    dest_field = config[dest_config]
+        return False;
+    dest_field = config[dest_config];
     if dest_field in fields:
-        note[dest_field] = note[dest_field] + new_text
-        return True
+        note[dest_field] = note[dest_field] + new_text;
+        return True;
 
+def replace_field(fields: list, note: Note, dest_config: str, new_text: str):
+    if new_text == "":
+        return False;
+    dest_field = config[dest_config];
+    if dest_field in fields:
+        if new_text == note[dest_field]:
+            return False;
+        note[dest_field] = new_text;
+        return True;
+    return False;
 
 def get_field(fields: list, note: Note, dest_config: str):
-    dest_field = config[dest_config]
+    dest_field = config[dest_config];
     if dest_field in fields:
-        return note[dest_field]
-    return ""
+        return note[dest_field];
+    return "";
 
 def get_jpod_audio(url):
     try:
